@@ -1,51 +1,38 @@
 import streamlit as st
 import pandas as pd
-import easyocr
-from PIL import Image
-import numpy as np
 import re
 
-st.set_page_config(page_title="DHL Adres Scanner", layout="wide")
-st.title("🚚 DHL Multi-Scan Tool")
-
-@st.cache_resource
-def load_reader():
-    return easyocr.Reader(['nl'])
-
-reader = load_reader()
+st.set_page_config(page_title="DHL Adres Filter", page_icon="🚚")
+st.title("🚚 DHL Adres Ontdubbeling")
 
 if 'adressen_lijst' not in st.session_state:
     st.session_state.adressen_lijst = []
 
-st.info("Tip: Maak foto's van DICHTBIJ. Het geeft niet als het vel er maar half op staat. De app verzamelt alles.")
+st.write("1. Maak een foto van je lijst met je normale camera-app.")
+st.write("2. Gebruik **Google Lens** (of de 'tekst selecteren' functie in je galerij) om de tekst te kopiëren.")
+st.write("3. Plak de tekst hieronder.")
 
-foto = st.camera_input("Scan een deel van het vel")
+plak_tekst = st.text_area("Plak hier de gekopieerde tekst van je vellen", height=200)
 
-if foto:
-    with st.spinner('Tekst herkennen...'):
-        img = Image.open(foto)
-        # Optimalisatie: Maak afbeelding zwart-wit voor betere OCR
-        img = img.convert('L') 
-        img_np = np.array(img)
-        
-        result = reader.readtext(img_np, detail=0)
-        tekst_blok = " ".join(result)
-        
-        # We zoeken naar de combinatie: Straat + Huisnummer + Postcode
-        # Dit patroon is flexibeler voor leesfouten
-        pattern = re.compile(r"([A-Z\s\-]+?\d+[A-Z\s\-]*)\s+(\d{4}\s?[A-Z]{2})")
-        matches = pattern.findall(tekst_blok)
-        
-        for match in matches:
-            adres = f"{match[0].strip()} {match[1].strip()}"
-            if adres not in st.session_state.adressen_lijst:
-                st.session_state.adressen_lijst.append(adres)
-        
-        st.success(f"Totaal aantal unieke adressen verzameld: {len(st.session_state.adressen_lijst)}")
+if st.button("Adressen Toevoegen"):
+    # Zoek naar postcodes (4 cijfers, 2 letters) als ankerpunt
+    pattern = re.compile(r"([A-Z0-9\s\-]+?\d+[A-Z\s\-]*)\s+(\d{4}\s?[A-Z]{2})")
+    matches = pattern.findall(plak_tekst)
+    
+    nieuwe_teller = 0
+    for match in matches:
+        # We pakken de straat + huisnummer en de postcode
+        schon_adres = f"{match[0].strip()} {match[1].strip()}".replace('\n', ' ')
+        if schon_adres not in st.session_state.adressen_lijst:
+            st.session_state.adressen_lijst.append(schon_adres)
+            nieuwe_teller += 1
+            
+    st.success(f"Toegevoegd: {nieuwe_teller} nieuwe unieke adressen.")
 
-# Weergave van de resultaten
+# Resultaten tonen
 if st.session_state.adressen_lijst:
-    df = pd.DataFrame(st.session_state.adressen_lijst, columns=["Adres & Postcode"])
+    df = pd.DataFrame(st.session_state.adressen_lijst, columns=["Adres"])
+    st.subheader(f"Totaal overzicht: {len(df)} unieke adressen")
     st.dataframe(df, use_container_width=True)
     
     csv = df.to_csv(index=False).encode('utf-8')
